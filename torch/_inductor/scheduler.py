@@ -1468,6 +1468,7 @@ class Scheduler:
             for read_dep in node.read_writes.reads:
                 if (
                     read_dep.name in self.name_to_node
+                    and read_dep.name != node_name
                     and isinstance(read_dep, dependencies.MemoryDep)
                     and isinstance(write_dep, dependencies.MemoryDep)
                     and read_dep.index == write_dep.index
@@ -1675,6 +1676,8 @@ class Scheduler:
         for node in self.nodes:
             ancestors = set()
             for dep in node.unmet_dependencies:
+                if dep.name == node.get_name():
+                    continue
                 ancestors.add(dep.name)
                 ancestors |= name_to_ancestors[dep.name]
             name_to_ancestors[node.get_name()] = ancestors
@@ -2173,6 +2176,22 @@ class Scheduler:
         # we still can match unmet dep
         # if there's indirect indexing, don't match it
         def fusable_read_and_write(read: Dep, write: Dep):
+            read_name = self.mutation_renames.get(read.name, read.name)
+            write_name = self.mutation_renames.get(write.name, write.name)
+            if (
+                isinstance(read, MemoryDep)
+                and isinstance(write, MemoryDep)
+                and read.mode is not None
+                and (read.mode == write.mode or read_name != write_name)
+            ):
+                return True
+            if (
+                isinstance(read, StarDep)
+                and isinstance(write, MemoryDep)
+                and read_name == write_name
+                and write.mode is not None
+            ):
+                return True
             return (
                 self.mutation_renames.get(read.name, read.name) == write.name
                 and (isinstance(read, MemoryDep) and isinstance(write, MemoryDep))
